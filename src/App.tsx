@@ -32,6 +32,8 @@ import {
   OFFICE_SIM_TOOL_MESSAGES, OFFICE_SIM_BOSS_PROMPTS,
   assignCharacterToRole, releaseRole, nextUnusedOfficeCharacter, displayNameFromSlug,
 } from './theme'
+import { generateThaiChat, generateThaiConversation } from './thai-chat'
+import VOAI_CONFIG from '../office.config.json'
 
 // ---------------------------------------------------------------------------
 // Placement helper — loaded via ?helper query param
@@ -153,6 +155,44 @@ function createClaude(): Agent {
     pathQueue: computePath(entry, target),
   }
 }
+
+// ── VOAI Agents (Suwoith AI Team) ──
+const VOAI_SPOTS = MAIN_ROOM.agentSpots.filter(s =>
+  s.id !== 'spot-1' && s.id !== 'spot-2' && s.type === 'desk'
+)
+
+function createVoaiAgent(cfg: any, spot: any): Agent {
+  const entry = MAIN_ROOM.entryPoint
+  const target = { x: spot.x, y: spot.y }
+  const agentCfg = AGENT_CONFIGS[cfg.role] ?? AGENT_CONFIGS['default']
+  return {
+    id: cfg.id,
+    name: cfg.name,
+    type: 'subagent',
+    role: cfg.role,
+    state: 'new-hire',
+    position: { x: entry.x, y: entry.y },
+    targetPosition: target,
+    deskPosition: target,
+    room: 'main-office',
+    assignedRoom: 'main-office',
+    assignedSpotId: spot.id,
+    spriteFacing: spot.spriteFacing,
+    task: agentCfg.title,
+    statusText: spawnMessage(),
+    color: agentCfg.color,
+    emoji: agentCfg.emoji,
+    hiredAt: Date.now() + 1000,
+    pathQueue: computePath(entry, target),
+  }
+}
+
+const VOAI_AGENTS: Agent[] = (VOAI_CONFIG.agents ?? []).map((cfg: any, idx: number) => {
+  const spot = VOAI_SPOTS[idx] ?? VOAI_SPOTS[0]
+  return createVoaiAgent(cfg, spot)
+})
+
+const INITIAL_AGENTS = [createBoss(), createClaude(), ...VOAI_AGENTS]
 
 // How close (in %-units) an agent must be to their target before we consider
 // them "arrived"
@@ -283,10 +323,11 @@ const OFFICE_SIM_CHATTER = [
 const App: React.FC = () => {
   // All hooks must be at the top — before any conditional returns.
   const theme = useTheme() // Why: re-render rooms + agents when /the-office toggles
-  const [agents, setAgents] = useState<Agent[]>(() => [createBoss(), createClaude()])
+  const [agents, setAgents] = useState<Agent[]>(() => INITIAL_AGENTS)
   const agentMetaRef = useRef<Map<string, AgentMeta>>(new Map([
     [BOSS_ID, { spawnedAt: Date.now(), arrivedAtDeskAt: Date.now(), idleSince: null, onBreak: false, breakStartedAt: null }],
     [CLAUDE_ID, { spawnedAt: Date.now(), arrivedAtDeskAt: Date.now(), idleSince: null, onBreak: false, breakStartedAt: null }],
+    ...VOAI_AGENTS.map((a: Agent) => [a.id, { spawnedAt: Date.now(), arrivedAtDeskAt: null, idleSince: null, onBreak: false, breakStartedAt: null }] as [string, AgentMeta]),
   ]))
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -507,6 +548,18 @@ const App: React.FC = () => {
       addMsg(claudeCfg.title, CLAUDE_ROLE, claudeCfg.color, '🤖 clocked in')
     }, 1500)
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ---------------------------------------------------------------------------
+  // Thai Chat System — VOAI agents talking in Thai
+  // ---------------------------------------------------------------------------
+  const voaiAgentIds = ['hermes', 'leo', 'sam', 'ava', 'bella', 'sysbot']
+  const pick = <T, >(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]
+
+  // DISABLED: fake client-side Thai chatter. Agents now only speak via REAL
+  // 'chat_message' events from the backend (tied to real work). Idle when no work.
+  useEffect(() => {
+    // intentionally empty — no synthetic greetings or periodic random chat
   }, [])
 
   // ---------------------------------------------------------------------------
@@ -842,7 +895,49 @@ const App: React.FC = () => {
   // WebSocket connection
   // ---------------------------------------------------------------------------
 
-  useAgentSocket({ onEvent: handleEvent, url: 'ws://localhost:3334/ws', disabled: isSimMode })
+  // Use relative WS (same host) so it works through the HTTPS proxy → real backend.
+  // (was hardcoded ws://localhost:3334 which never connected, forcing fake/offline mode)
+  useAgentSocket({ onEvent: handleEvent, disabled: isSimMode })
+
+  // Auto-reload when a new build is deployed (no manual refresh needed).
+  // Polls index.html and compares the bundled asset hash to the running one.
+  useEffect(() => {
+    const running = Array.from(document.scripts)
+      .map(el => el.src)
+      .find(src => /\/assets\/index-[A-Za-z0-9_]+\.js/.test(src))
+    if (!running) return
+    const runningFile = running.split('/').pop()
+    const check = async () => {
+      try {
+        const html = await fetch('./?_=' + Date.now(), { cache: 'no-store' }).then(r => r.text())
+        const m = html.match(/assets\/(index-[A-Za-z0-9_]+\.js)/)
+        if (m && m[1] !== runningFile) window.location.reload()
+      } catch { /* offline — ignore */ }
+    }
+    const id = setInterval(check, 45000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Scale the whole office stage so characters & furniture grow proportionally with the room
+  const officeViewRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const view = officeViewRef.current
+    if (!view) return
+    const DESIGN_W = 760
+    const DESIGN_H = 760 * 3584 / 4800
+    const apply = () => {
+      const w = view.clientWidth
+      const h = view.clientHeight
+      if (!w || !h) return
+      const scale = Math.min(w / DESIGN_W, h / DESIGN_H)
+      document.documentElement.style.setProperty('--stage-scale', String(scale))
+    }
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(view)
+    window.addEventListener('resize', apply)
+    return () => { ro.disconnect(); window.removeEventListener('resize', apply) }
+  }, [])
 
   // ---------------------------------------------------------------------------
   // Simulation loop — spawns/completes fake agents (only in ?sim mode)
@@ -1782,13 +1877,15 @@ const App: React.FC = () => {
       </div>
 
       <div className="app-body">
-      <div className="office-view">
+      <div className="office-view" ref={officeViewRef}>
         <div
           className={`room-container${flickering ? ' flickering' : ''}`}
           style={{
-            aspectRatio: '4800/3584',
-            width: '100%',
-            maxHeight: '100%',
+            width: 760,
+            height: 760 * 3584 / 4800,
+            transform: 'scale(var(--stage-scale, 1))',
+            transformOrigin: 'center center',
+            flex: '0 0 auto',
             position: 'relative',
           }}
         >
@@ -1918,7 +2015,7 @@ const App: React.FC = () => {
           addMsg(bossCfg.title, BOSS_ROLE, bossCfg.color, text)
           setAutoTypeText(undefined)
           // Send to server so Claude can read it
-          fetch('http://127.0.0.1:3334/chat', {
+          fetch(`${window.location.pathname.startsWith('/office')?'/office':'http://127.0.0.1:3334'}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sender: bossCfg.title, text }),

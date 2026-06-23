@@ -29,8 +29,13 @@ export const BOSS_EMOJI = bossEmoji
 // Map agent roles to character sprite base names (in /sprites/characters/)
 export const ROLE_TO_CHAR: Record<string, string> = {
   'boss':                  bossSprite,
-  'assistant':             'Claude-1',
-  'debugger':              'dev-1',
+  // VOAI Agents (Suwoith AI Team)
+  'coordinator':           'Me-1',     // Hermes - Boss
+  'analyst':               'dev-1',    // Leo
+  'writer':                'employee-1', // Sam
+  'designer':              'explore-1',  // Ava
+  'social':                'employee-2', // Bella
+  'ops':                   'security-audit-1', // SysBot
   'code-reviewer':         'employee-1',
   'frontend-developer':    'Frontend-dev-1',
   'fullstack-developer':   'dev-2',

@@ -61,8 +61,12 @@ type ServerMessage = OfficeEvent | SnapshotMessage
 // Constants
 // ---------------------------------------------------------------------------
 
-const WS_URL         = 'ws://localhost:3334/ws'
-const ROSTER_URL     = 'http://localhost:3334/roster'
+const WS_URL         = (() => {
+  // Use same host:port as the page (relative WebSocket)
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}${window.location.pathname.startsWith('/office') ? '/office' : ''}/ws`
+})()
+const ROSTER_URL     = (window.location.pathname.startsWith('/office') ? '/office' : '') + '/roster'
 const MAX_EVENTS     = 50
 const BACKOFF_INITIAL = 500   // ms
 const BACKOFF_MAX    = 30_000 // ms

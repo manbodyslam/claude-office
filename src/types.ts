@@ -78,5 +78,13 @@ export const AGENT_CONFIGS: Record<string, { color: string; emoji: string; title
   'gmail':                 { color: '#ea4335', emoji: '📧', title: 'Gmail' },
   'ios-simulator':         { color: '#a2aaad', emoji: '📱', title: 'iOS' },
   'assistant':             { color: '#cc785c', emoji: '🤖', title: 'Claude' },
+  // VOAI Team
+  'coordinator':           { color: '#5e6ad2', emoji: '👑', title: 'Coordinator' },
+  'analyst':               { color: '#3b82f6', emoji: '📊', title: 'Analyst' },
+  'writer':                { color: '#10b981', emoji: '✍️', title: 'Writer' },
+  'designer':              { color: '#f59e0b', emoji: '🎨', title: 'Designer' },
+  'social':                { color: '#ec4899', emoji: '💬', title: 'Social' },
+  'ops':                   { color: '#6366f1', emoji: '🔧', title: 'Ops' },
+  // Default
   'default':               { color: '#95a5a6', emoji: '👤', title: 'Worker' },
 }
