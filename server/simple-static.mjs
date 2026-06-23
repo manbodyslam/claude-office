@@ -9,6 +9,7 @@ import { open } from 'sqlite'
 
 // AI Engine
 import { chatWithAgent, generateAgentConversation, executeTaskWithAI, parseChatCommand, getAgentInfo, qaReviewTask } from '/opt/voai/ai-engine.mjs'
+import { addMessage, getMessages } from './chat-db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = 3336
@@ -64,6 +65,15 @@ wss.on('connection', (ws) => {
       id, name: a.name, role: FRONTEND_ROLE[id] || 'general-purpose', task: a.role
     }))
   }))
+
+  // Replay persisted chat history so reload/auto-reload keeps the conversation
+  try {
+    const history = getMessages({ limit: 50 })
+    ws.send(JSON.stringify({
+      type: 'chat_history',
+      messages: history.map(m => ({ sender: m.sender, role: m.role, text: m.text, timestamp: m.timestamp, isBoss: m.role === 'boss' }))
+    }))
+  } catch (e) { console.error('[office] chat_history:', e.message) }
 
   ws.on('message', async (data) => {
     try {
@@ -280,6 +290,12 @@ app.use('/api', async (req, res) => {
   }
 })
 
+// Persist + broadcast a chat message (so reload keeps the conversation)
+function sendChat({ sender, role, text }) {
+  try { addMessage({ sender, role, text }) } catch (e) { console.error('[office] db save:', e.message) }
+  wsBroadcast({ type: 'chat_message', sender, role, text, timestamp: Date.now() })
+}
+
 // == Boss types in Slack panel (POST /chat) ==
 //  "@agent (task|sang|tham): ..." -> assign + execute + QA   |   otherwise -> chat reply
 async function handleBossChat(text) {
@@ -303,7 +319,7 @@ async function handleBossChat(text) {
     const p = agent.gender === 'male' ? 'ครับ' : 'ค่ะ'
     reply = 'ขออภัย' + p + ' ระบบ AI มีปัญหาชั่วคราว ลองใหม่นะ' + p
   }
-  wsBroadcast({ type: 'chat_message', sender: agent.name, role, text: reply, timestamp: Date.now() })
+  sendChat({ sender: agent.name, role, text: reply })
 }
 
 // == Boss assigns a real task -> agent executes -> SysBot QA review ==
@@ -312,7 +328,7 @@ async function handleBossTask(agentId, taskTitle) {
   const role = FRONTEND_ROLE[agentId] || 'assistant'
   const p = agent.gender === 'male' ? 'ครับ' : 'ค่ะ'
 
-  wsBroadcast({ type: 'chat_message', sender: agent.name, role, text: 'รับทราบ' + p + '! จะทำ "' + taskTitle + '" ให้เลย' + p, timestamp: Date.now() })
+  sendChat({ sender: agent.name, role, text: 'รับทราบ' + p + '! จะทำ "' + taskTitle + '" ให้เลย' + p })
 
   try {
     await fetch(VOAI_BACKEND + '/api/tasks', {
@@ -330,7 +346,7 @@ async function handleBossTask(agentId, taskTitle) {
     console.error('[office] task exec error:', e.message)
     aiResult = { success: false, chatMessage: 'ทำงานไม่สำเร็จ' + p + ' ' + e.message }
   }
-  wsBroadcast({ type: 'chat_message', sender: agent.name, role, text: aiResult.chatMessage, timestamp: Date.now() })
+  sendChat({ sender: agent.name, role, text: aiResult.chatMessage })
   wsBroadcast({ type: 'agent_completed', agentId, result: 'เสร็จงาน ' + taskTitle })
 
   if (aiResult.success) {
@@ -344,7 +360,7 @@ async function handleBossTask(agentId, taskTitle) {
       qa = { verdict: 'warn', chatMessage: 'ตรวจ QA ไม่สำเร็จ: ' + e.message }
     }
     const badge = qa.verdict === 'pass' ? ' ✅' : qa.verdict === 'fail' ? ' ❌' : ' ⚠️'
-    wsBroadcast({ type: 'chat_message', sender: sys.name, role: 'ops', text: '🔍 QA: ' + qa.chatMessage + badge, timestamp: Date.now() })
+    sendChat({ sender: sys.name, role: 'ops', text: '🔍 QA: ' + qa.chatMessage + badge })
     wsBroadcast({ type: 'agent_completed', agentId: 'sysbot', result: 'QA done' })
   }
 }
@@ -357,8 +373,11 @@ app.post('/chat/cron-state', (req, res) => { chatCronPaused = !!(req.body && req
 // Boss message endpoint
 app.post('/chat', (req, res) => {
   const text = String((req.body && req.body.text) || '').trim()
+  const sender = String((req.body && req.body.sender) || 'You')
   res.json({ ok: true })
-  if (text) handleBossChat(text).catch(e => console.error('[office] handleBossChat:', e.message))
+  if (!text) return
+  try { addMessage({ sender, role: 'boss', text }) } catch (e) { console.error('[office] db boss:', e.message) }
+  handleBossChat(text).catch(e => console.error('[office] handleBossChat:', e.message))
 })
 
 // Roster — MCP/server roster for the office sidebar (returns clean JSON so the

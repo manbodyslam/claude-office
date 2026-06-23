@@ -882,6 +882,29 @@ const App: React.FC = () => {
           return prev
         }
 
+        // ── Restore persisted conversation on (re)connect ──────────────────
+        case 'chat_history': {
+          const items = (event as any).messages
+          if (Array.isArray(items) && items.length) {
+            const bossCfg = AGENT_CONFIGS[BOSS_ROLE] ?? AGENT_CONFIGS['default']
+            const restored = items.map((m: any) => {
+              const isBoss = m.isBoss || m.role === 'boss'
+              const cfg = AGENT_CONFIGS[m.role] ?? AGENT_CONFIGS['default']
+              return {
+                id: makeMsgId(),
+                sender: isBoss ? bossCfg.title : m.sender,
+                senderSprite: isBoss ? BOSS_ROLE : m.role,
+                senderColor: isBoss ? bossCfg.color : cfg.color,
+                text: m.text,
+                channel: 'office-general',
+                timestamp: new Date(m.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+              }
+            })
+            setTimeout(() => setMessages(restored), 0)
+          }
+          return prev
+        }
+
         default:
           return prev
       }

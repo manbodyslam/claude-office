@@ -16,3 +16,11 @@ office.config.json
 graphify-out/cache/
 graphify-out/.graphify_*
 graphify-out/graph.html
+
+# backups / deploy artifacts (added by cleanup)
+*.bak
+*.bak.*
+*.predit*
+/dist.bak*
+*.bundle
+/server/_archive/
