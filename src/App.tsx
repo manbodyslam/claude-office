@@ -543,6 +543,7 @@ const App: React.FC = () => {
     arrivedRef.current = true
     const bossCfg = AGENT_CONFIGS[BOSS_ROLE] ?? AGENT_CONFIGS['default']
     addMsg(bossCfg.title, BOSS_ROLE, bossCfg.color, '👑 clocked in')
+    addMsg('ระบบ', 'assistant', '#8a8f98', '💡 พิมพ์คุยได้เลย • สั่งงาน: "@leo ทำ: ..."', true)
     const claudeCfg = AGENT_CONFIGS[CLAUDE_ROLE] ?? AGENT_CONFIGS['default']
     setTimeout(() => {
       addMsg(claudeCfg.title, CLAUDE_ROLE, claudeCfg.color, '🤖 clocked in')
@@ -920,7 +921,7 @@ const App: React.FC = () => {
 
   // Use relative WS (same host) so it works through the HTTPS proxy → real backend.
   // (was hardcoded ws://localhost:3334 which never connected, forcing fake/offline mode)
-  useAgentSocket({ onEvent: handleEvent, disabled: isSimMode })
+  const { connected: wsConnected } = useAgentSocket({ onEvent: handleEvent, disabled: isSimMode })
 
   // Auto-reload when a new build is deployed (no manual refresh needed).
   // Polls index.html and compares the bundled asset hash to the running one.
@@ -2029,6 +2030,7 @@ const App: React.FC = () => {
 
       <SlackChat
         messages={messages}
+        connected={isSimMode || wsConnected}
         muted={muted}
         volume={volume}
         onToggleMute={handleToggleMute}

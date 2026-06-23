@@ -40,9 +40,11 @@ interface SlackChatProps {
   typingUser?: string | null
   /** ID of the last message seen by the assistant — renders a tiny seen avatar */
   lastSeenId?: number | null
+  /** Live WebSocket connection state (undefined = treat as online) */
+  connected?: boolean
 }
 
-const SlackChat: React.FC<SlackChatProps> = ({ messages, muted, volume, onToggleMute, onVolumeChange, onSendMessage, onReaction, autoTypeText, dayPhase, typingUser, lastSeenId }) => {
+const SlackChat: React.FC<SlackChatProps> = ({ messages, muted, volume, onToggleMute, onVolumeChange, onSendMessage, onReaction, autoTypeText, dayPhase, typingUser, lastSeenId, connected }) => {
   const theme = useTheme()
   void theme // Why: subscribe so avatars re-render when /the-office toggles
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -135,8 +137,8 @@ const SlackChat: React.FC<SlackChatProps> = ({ messages, muted, volume, onToggle
         <div className="slack-channel-icon">#</div>
         <span className="slack-channel-name">office-general</span>
         <div className="slack-header-right">
-          <div className="slack-online-dot" />
-          <span className="slack-online-count">{onlineCount}</span>
+          <div className={`slack-online-dot${connected === false ? ' offline' : ''}`} title={connected === false ? 'ขาดการเชื่อมต่อ — กำลังเชื่อมต่อใหม่' : 'เชื่อมต่อแล้ว'} />
+          <span className="slack-online-count">{connected === false ? 'reconnecting…' : onlineCount}</span>
           <div
             className={`slack-cron-toggle ${cronPaused ? 'paused' : 'active'}`}
             onClick={toggleCron}
@@ -259,7 +261,7 @@ const SlackChat: React.FC<SlackChatProps> = ({ messages, muted, volume, onToggle
           <input
             type="text"
             className="slack-input-field"
-            placeholder="Message #office-general"
+            placeholder='พิมพ์คุย หรือสั่งงาน เช่น @leo ทำ: ...'
             value={inputText}
             onChange={e => {
               const val = e.target.value

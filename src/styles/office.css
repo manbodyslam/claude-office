@@ -1219,3 +1219,14 @@
   pointer-events: none;
   z-index: 3;
 }
+
+/* connection-status: offline indicator on the channel dot */
+.slack-online-dot.offline {
+  background: #e0556b;
+  box-shadow: 0 0 5px #e0556b;
+  animation: pulseOffline 1s ease-in-out infinite;
+}
+@keyframes pulseOffline {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
